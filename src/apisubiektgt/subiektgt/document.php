@@ -29,6 +29,7 @@ class Document extends SubiektObj {
 	protected $id_gr_flag = NULL;
 	protected $flag_name = '';
 	protected $flag_comment = '';
+
 	
 
 	public function __construct($subiektGt,$documentDetail = array()){

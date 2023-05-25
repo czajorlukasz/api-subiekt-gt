@@ -33,6 +33,7 @@ class Product extends SubiektObj{
 	protected $group_id = '';
 	protected $off_prefix = 0;
 
+
 	public function __construct($subiektGt,$productDetail = array()){		
 		parent::__construct($subiektGt, $productDetail);
 		$this->excludeAttr(array('productGt','off_prefix','is_exists','objDetail'));
@@ -236,12 +237,16 @@ class Product extends SubiektObj{
 	}
 
 	public function add(){
+		
 		$this->productGt = $this->subiektGt->TowaryManager->DodajTowar();
+		
 		$this->setGtObject();		
 		$this->productGt->Zapisz();
 		Logger::getInstance()->log('api','Utworzono produkt: '.$this->productGt->Symbol,__CLASS__.'->'.__FUNCTION__,__LINE__);
 		return array('gt_id'=>$this->productGt->Identyfikator);
 	}
+	
+
 
 	public function setProductSupplierCode($supplier_code){
 		if(!$this->productGt){

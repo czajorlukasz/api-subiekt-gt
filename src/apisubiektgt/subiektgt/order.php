@@ -24,7 +24,9 @@ class Order extends SubiektObj {
 	protected $date_of_delivery = '';
 	protected $payment_comments = '';
 	protected $pay_type = 'transfer';
+	protected $pay_time = "26/2/2023";
 	protected $create_product_if_not_exists = false;
+	protected $us_jednorazowa = false;
 	protected $orderDetail= array();
 	protected $order_processing = false;
 	protected $id_flag = 0;
@@ -37,6 +39,14 @@ class Order extends SubiektObj {
 		parent::__construct($subiektGt, $orderDetail);
 		$this->excludeAttr(array('orderGt','orderDetail','pay_type','create_product_if_not_exists'));
 
+		if(isset($this->warehouse)){
+			
+	   Logger::getInstance()->log('api','Zmiana magazynu na: '.$this->warehouse ,__CLASS__.'->'.__FUNCTION__,__LINE__);
+			
+		$this->subiektGt->MagazynId = intval($this->warehouse);
+		Logger::getInstance()->log('api','Aktualny magazyn : '.$this->subiektGt->MagazynId ,__CLASS__.'->'.__FUNCTION__,__LINE__);
+		
+		}
 
 		if($this->order_ref !='' && $subiektGt->SuDokumentyManager->Istnieje($this->order_ref)){
 			$this->orderGt = $subiektGt->SuDokumentyManager->Wczytaj($this->order_ref);
@@ -53,17 +63,28 @@ class Order extends SubiektObj {
 			return false;
 		}
 		$p_data = $p->get();
+		
 		if(isset($product['supplier_code']) && strlen($product['supplier_code'])>0){
 			$p->setProductSupplierCode($product['supplier_code']);
 		}
+		
+		
 		//var_dump($p_data);
+		
+		
 		$code = sprintf('%s',$p_data['code']);
 
 		$position = $this->orderGt->Pozycje->Dodaj($code);
+		
+		
 		$position->IloscJm = intval($product['qty']);				
-		$position->WartoscBruttoPoRabacie  = floatval($product['price']) * intval($product['qty']);
+		$position->WartoscNettoPoRabacie  = floatval($product['price']) * intval($product['qty']); //zmiana
+		Logger::getInstance()->log('api','Cena: '.floatval($product['price']),__CLASS__.'->'.__FUNCTION__,__LINE__);
+		Logger::getInstance()->log('api','Ilosc: '.intval($product['qty']),__CLASS__.'->'.__FUNCTION__,__LINE__);
+		Logger::getInstance()->log('api','Wartosc przed rabatem: '.$position->WartoscNettoPoRabacie,__CLASS__.'->'.__FUNCTION__,__LINE__);
+		
 		if(floatval($product['price_before_discount'])>0){
-			$position->WartoscBruttoPrzedRabatem = floatval($product['price_before_discount']) * intval($product['qty']);
+			$position->WartoscNettoPrzedRabatem = floatval($product['price_before_discount']) * intval($product['qty']);
 		}
 		Logger::getInstance()->log('api','Dodaje pozycje o kodzie: '.$code ,__CLASS__.'->'.__FUNCTION__,__LINE__);
 		return $position;
@@ -74,6 +95,7 @@ class Order extends SubiektObj {
 		$this->orderGt->Uwagi  = $this->comments;	
 		$this->orderGt->Rezerwacja = $this->reservation;		
 		$this->orderGt->NumerOryginalny = $this->reference;
+		
 		switch($this->pay_type){
 			case 'transfer' : 
 							  $this->orderGt->PlatnoscGotowkaKwota = 0;
@@ -83,13 +105,18 @@ class Order extends SubiektObj {
 						  $this->orderGt->PlatnoscKartaId = intval($this->pay_point_id);
 				break;
 			case 'money' : $this->orderGt->PlatnoscGotowkaKwota = floatval($this->amount); break;
-			case 'credit' : $this->orderGt->PlatnoscKredytKwota = floatval($this->amount); break;
+			case 'credit' : $this->orderGt->PlatnoscKredytKwota = floatval($this->amount);
+			
+			//termin platnosci!!!!!!!
+							$this->orderGt->PlatnoscKredytTermin = $this->pay_time;
+			//termin platnosci!!!!!!
+							break;
 			case 'loan' : $this->orderGt->PlatnoscRatyKwota = floatval($this->amount); break;
 			default:
 					$this->orderGt->PlatnoscPrzelewKwota = floatval($this->amount);
 			break;
 		}
-		$this->orderGt->LiczonyOdCenBrutto = true;	
+	//	$this->orderGt->LiczonyOdCenBrutto = true;	
 
 	}
 
@@ -106,6 +133,9 @@ class Order extends SubiektObj {
 	}
 
 	public function makeSaleDoc(){
+		
+
+		
 		if(!$this->is_exists){
 					return array(
 							'order_ref' => $this->order_ref,
@@ -114,16 +144,24 @@ class Order extends SubiektObj {
 							'message' => 'Nie odnaleziono dokumentu',
 							'doc_ref' => false
 					);		
-		}
+		} 
+		
+		
+		
+		
 		
 		if($this->customer['is_company'] == true){
 			$selling_doc = $this->subiektGt->SuDokumentyManager->DodajFS();
 		}else{
 			$selling_doc = $this->subiektGt->SuDokumentyManager->DodajPAi();
 		}
-		if($this->orderGt->WartoscBrutto == 0){
+		
+		Logger::getInstance()->log('api','Zamowienie nr  : '.$this->order_ref,__CLASS__.'->'.__FUNCTION__,__LINE__);
+		Logger::getInstance()->log('api','Id  : '.$this->gt_id,__CLASS__.'->'.__FUNCTION__,__LINE__);
+		
+		/*if($this->orderGt->WartoscBrutto == 0){
 			throw new Exception('Nie można utworzyć dokumentu sprzedaży. 0 wartość dokumentu.');
-		}
+		}*/
 
 		try{
 			$selling_doc->NaPodstawie(intval($this->gt_id));
@@ -149,7 +187,7 @@ class Order extends SubiektObj {
 		}
 		$selling_doc->Podtytul = trim($this->orderGt->Tytul);//.'/'.$this->orderGt->order_ref;
 		$selling_doc->Wystawil = Helper::toWin($this->cfg->getIdPerson());
-		$selling_doc->LiczonyOdCenBrutto = true;
+		$selling_doc->LiczonyOdCenNetto = true;
 		$selling_doc->Zapisz();			
 		Logger::getInstance()->log('api','Utworzono dokument sprzedaży: '.$selling_doc->NumerPelny,__CLASS__.'->'.__FUNCTION__,__LINE__);
 		$response =  array(
@@ -252,6 +290,16 @@ class Order extends SubiektObj {
 
 
 	public function add(){	
+	
+	
+		if(isset($this->orderDetail['warehouse'])){
+			
+			Logger::getInstance()->log('api','Zmiana magazynu na: '.$this->orderDetail['warehouse'] ,__CLASS__.'->'.__FUNCTION__,__LINE__);
+			
+		$this->subiektGt->MagazynId = intval($this->orderDetail['warehouse']);
+		
+		
+		}
 		$this->customer = isset($this->orderDetail['customer'])?$this->orderDetail['customer']:false;
 		if(!$this->customer){
 			throw new Exception('Brak danych "customer" dla zamówienia!',1);
@@ -260,7 +308,9 @@ class Order extends SubiektObj {
 			throw new Exception('Brak danych "products" dla zamówienia!',1);
 		}
 
-		$this->orderGt = $this->subiektGt->SuDokumentyManager->DodajZK();		
+
+	    $this->orderGt = $this->subiektGt->SuDokumentyManager->DodajZK();	
+		//$this->orderGt = $this->subiektGt->SuDokumentyManager->DodajFS();			
 
 		$customer = new Customer($this->subiektGt,$this->customer);
 		if(!$customer->isExists()){
@@ -271,16 +321,50 @@ class Order extends SubiektObj {
 		$this->orderGt->KontrahentId = intval($cust_data['gt_id']);	
 		
 		foreach($this->products as $p){
+			
 			$add_postition = false;
-			if(!($add_postition = $this->addPosition($p))
-				&& $this->create_product_if_not_exists == false){					
+			
+	
+			
+			
+				if(  isset($p['us_jednorazowa']) && $p['us_jednorazowa'] == true) {
+				
+				Logger::getInstance()->log('api','Dodaje Usługa jednorazowa: '.$p["name"] ,__CLASS__.'->'.__FUNCTION__,__LINE__);
+				
+				$position = false;
+				$position = $this->orderGt->Pozycje->DodajUslugeJednorazowa;
+				$position->UslJednNazwa  = mb_convert_encoding($p["name"] , 'iso-8859-2', 'utf-8') ;//$p["name"];
+				$position->IloscJm = $p['qty'];
+				$position->WartoscNettoPoRabacie  = floatval($p['price']) * intval($p['qty']);
+				if(floatval($p['price_before_discount'])>0){
+				$position->WartoscNettoPrzedRabatem = floatval($p['price_before_discount']) * intval($p['qty']);
+			}
+		
+			
+			}
+
+			if(!($add_postition = $this->addPosition($p) && $this->create_product_if_not_exists == false) && !isset($p['us_jednorazowa']) ){					
 					throw new Exception('Nie odnaleziono towaru o podanym kodzie: '.$p['code'],1);												
 			}
-			if(!$add_postition && $this->create_product_if_not_exists == true){
+			
+			
+			
+			if(!$add_postition && $this->create_product_if_not_exists == true &&  !isset($p['us_jednorazowa'])  ){
+				
+				Logger::getInstance()->log('api','Dodaje Produkt ' ,__CLASS__.'->'.__FUNCTION__,__LINE__);
+				
 				$p_obj = new Product($this->subiektGt,$p);
-				$p_obj->add();				
+				
+				$p_obj->add();		
+						
 				$this->addPosition($p);				
 			}
+			
+		
+			
+			
+			
+
 		}
 
 		$this->orderGt->Przelicz();

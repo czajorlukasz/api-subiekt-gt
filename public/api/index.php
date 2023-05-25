@@ -27,12 +27,15 @@ try {
 	$jsonStr = trim($jsonStr);
 	if ($jsonStr != NULL) {
 		$json_request = json_decode($jsonStr, true);
+	//	Logger::getInstance()->log('api', 'Request data: ' . $jsonStr , $class . '->' . $method, __LINE__);
 		if (json_last_error() > 0) {
 			throw new Exception("JSON read: " . json_last_error_msg());
 		}
 	} else {
 		throw new Exception("Brak danych w żądaniu!");
 	}
+	
+
 
 
 	//include('json_test.php');
@@ -93,6 +96,8 @@ try {
 	//$subiektGtCom->Zakoncz();
 	
 	Logger::getInstance()->log('api', 'Request finish: ' . $_SERVER['REMOTE_ADDR'], $class . '->' . $method, __LINE__);
+	
+	
 } catch (Exception $e) {
 	$json_response['state'] = 'fail';
 	$json_response['message'] = strip_tags($e->getMessage());
@@ -104,6 +109,7 @@ try {
 }
 
 $json_string = json_encode($json_response, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
 if (JSON_ERROR_UTF8 == json_last_error()) {
 	$json_string = json_encode(Helper::toUtf8($json_response), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 }
